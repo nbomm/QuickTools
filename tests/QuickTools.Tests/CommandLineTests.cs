@@ -66,4 +66,12 @@ public class CommandLineTests
     [InlineData("", "unknown")]
     public void AppVersion_Format(string? informational, string expected) =>
         Assert.Equal(expected, AppVersion.Format(informational));
+
+    [Theory]
+    [InlineData("1.0.3+ffe81c0a1b2c3d4e5f60718293a4b5c6d7e8f901", "1.0.3")]
+    [InlineData("1.0.3-ci+abc", "1.0.3-ci")]
+    [InlineData("1.0.0", "1.0.0")]
+    [InlineData(null, "unknown")]
+    public void AppVersion_NumberOf(string? informational, string expected) =>
+        Assert.Equal(expected, AppVersion.NumberOf(informational));
 }

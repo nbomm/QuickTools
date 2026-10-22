@@ -111,4 +111,27 @@ internal static class NativeMethods
 
     [DllImport("kernel32.dll")]
     public static extern bool AttachConsole(uint dwProcessId);
+
+    public const int STD_ERROR_HANDLE = -12;
+    public const uint FILE_TYPE_DISK = 0x1;
+    public const uint FILE_TYPE_PIPE = 0x3;
+    public const uint GENERIC_READ = 0x80000000;
+    public const uint GENERIC_WRITE = 0x40000000;
+    public const uint FILE_SHARE_READ = 0x1;
+    public const uint FILE_SHARE_WRITE = 0x2;
+    public const uint OPEN_EXISTING = 3;
+
+    [DllImport("kernel32.dll")]
+    public static extern IntPtr GetStdHandle(int nStdHandle);
+
+    [DllImport("kernel32.dll")]
+    public static extern uint GetFileType(IntPtr hFile);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern Microsoft.Win32.SafeHandles.SafeFileHandle CreateFileW(string lpFileName, uint dwDesiredAccess,
+        uint dwShareMode, IntPtr lpSecurityAttributes, uint dwCreationDisposition, uint dwFlagsAndAttributes, IntPtr hTemplateFile);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    public static extern bool WriteConsoleW(Microsoft.Win32.SafeHandles.SafeFileHandle hConsoleOutput, string lpBuffer,
+        uint nNumberOfCharsToWrite, out uint lpNumberOfCharsWritten, IntPtr lpReserved);
 }

@@ -32,14 +32,23 @@ Everything is configured in a built-in editor or a plain JSON file. QuickTools h
 ## Requirements
 
 - Windows 10 or 11, x64.
-- The [.NET 9 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/9.0), unless you use the self-contained build. Building from source needs the .NET 9 SDK.
+- The [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0), unless you use the self-contained build. Building from source needs the .NET 10 SDK.
 
 ## Install
 
 Download an exe from the [Releases](https://github.com/nbomm/QuickTools/releases) page:
 
 - `QuickTools-<version>-win-x64.exe` runs on any Windows 10/11 x64 PC with nothing else installed.
-- `QuickTools-<version>-win-x64-framework-dependent.exe` is much smaller but needs the .NET 9 Desktop Runtime.
+- `QuickTools-<version>-win-x64-framework-dependent.exe` is much smaller but needs the .NET 10 Desktop Runtime.
+
+Each exe has a matching `.sha256` file containing its SHA-256 hash. To check a download, compare the two hashes in PowerShell:
+
+```powershell
+(Get-FileHash .\QuickTools-<version>-win-x64.exe -Algorithm SHA256).Hash
+Get-Content .\QuickTools-<version>-win-x64.exe.sha256     # the first word must match (case doesn't matter)
+```
+
+Or, with both files in the same folder, run `sha256sum -c QuickTools-<version>-win-x64.exe.sha256` in Git Bash, WSL or Linux.
 
 Rename it to `QuickTools.exe` if you like, put it anywhere (for example `%LOCALAPPDATA%\Programs\QuickTools\`), and run it. To start it automatically, turn on **Start QuickTools when I sign in to Windows** in Settings.
 
@@ -58,7 +67,7 @@ To produce a single `QuickTools.exe`:
 | Build | Command | Size | Needs .NET runtime |
 |---|---|---|---|
 | Framework-dependent | `dotnet publish src/QuickTools -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true` | ~0.2 MB | Yes |
-| Self-contained | `dotnet publish src/QuickTools -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true` | ~48 MB | No |
+| Self-contained | `dotnet publish src/QuickTools -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true` | ~49 MB | No |
 
 Add `-o <folder>` to choose the output folder. For ARM64 devices, use `-r win-arm64` (not tested).
 
@@ -66,7 +75,7 @@ Add `-o <folder>` to choose the output folder. For ARM64 devices, use `-r win-ar
 
 [`.github/workflows/build.yml`](.github/workflows/build.yml) runs on a Windows runner:
 
-- **Every push to `main`:** builds, runs the tests, publishes both exes, and creates a [GitHub Release](https://github.com/nbomm/QuickTools/releases) with both attached and release notes generated from the commits.
+- **Every push to `main`:** builds, runs the tests, publishes both exes, and creates a [GitHub Release](https://github.com/nbomm/QuickTools/releases) with both attached, a `.sha256` checksum file for each, and release notes generated from the commits.
 - **Pull requests:** build and test only. Their exes can be downloaded from the run's **Artifacts** section on the [Actions](https://github.com/nbomm/QuickTools/actions) page.
 
 Release versions are `Major.Minor.<workflow run number>`, for example `v1.0.42`. The number is stamped into the exe. Major and Minor come from `<VersionPrefix>` in `src/QuickTools/QuickTools.csproj`; change it (for example to `1.1.0` or `2.0.0`) to start a new series. Because pull-request builds use run numbers too, release numbers can skip.
@@ -214,6 +223,8 @@ To uninstall:
 ```
 src/QuickTools/
   Program.cs              Entry point, single-instance check
+  AppIcon.cs              Draws the app icon (tray icon and the source of QuickTools.ico)
+  QuickTools.ico          The exe's icon, generated from AppIcon.cs
   TrayAppContext.cs       Connects the tray icon, menus, launching and settings
   Tray/TrayIcon.cs        Shell_NotifyIcon wrapper (NOTIFYICON_VERSION_4, TaskbarCreated, icon rect)
   Menus/MenuPlacement.cs  Placement math (pure, unit-tested)
@@ -222,9 +233,12 @@ src/QuickTools/
   Services/               SettingsStore (JSON load/save), Launcher, PathResolver, IconCache, StartupManager
   UI/                     SettingsForm, MenuEditor (tree editor), EntryEditorForm
 tests/QuickTools.Tests/   xUnit tests: placement, settings load/save, path resolution
+tools/Generate-AppIcon.ps1  Regenerates QuickTools.ico from AppIcon.cs
 ```
 
 Contributions are welcome. Run `dotnet build` (it should report no warnings) and `dotnet test` before opening a pull request.
+
+The icon is drawn in code in `AppIcon.cs`, which is used for both the tray icon and the exe's icon. If you change the design, run `pwsh tools/Generate-AppIcon.ps1` to regenerate `src/QuickTools/QuickTools.ico`, and commit it along with the code.
 
 ## License
 

@@ -23,7 +23,7 @@ env:
 
 jobs:
   build:
-    # WinForms (net9.0-windows) tests need a Windows runner.
+    # WinForms (net10.0-windows) tests need a Windows runner.
     runs-on: windows-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -33,7 +33,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 9.0.x
+          dotnet-version: 10.0.x
 
       # Major.Minor from <VersionPrefix> in the project file, patch = run number.
       # Pushes to main are releases (1.0.42); anything else is marked -ci (1.0.42-ci).
@@ -66,7 +66,7 @@ jobs:
           -p:Version=${{ steps.version.outputs.version }}
           -o out/self-contained
 
-      - name: Publish framework-dependent (needs the .NET 9 Desktop Runtime)
+      - name: Publish framework-dependent (needs the .NET 10 Desktop Runtime)
         run: >
           dotnet publish src/QuickTools -c Release -r win-x64 --self-contained false
           -p:PublishSingleFile=true
@@ -106,6 +106,16 @@ jobs:
           cp "artifacts/QuickTools-$version-win-x64-self-contained/QuickTools.exe" "release/QuickTools-$version-win-x64.exe"
           cp "artifacts/QuickTools-$version-win-x64-framework-dependent/QuickTools.exe" "release/QuickTools-$version-win-x64-framework-dependent.exe"
           ls -l release
+
+      # One <exe>.sha256 per exe, in sha256sum format ("<hash>  <file name>"), so a download can be
+      # checked with `sha256sum -c <exe>.sha256` or compared against Get-FileHash on Windows.
+      - name: Write SHA-256 checksums
+        working-directory: release
+        run: |
+          for exe in *.exe; do
+            sha256sum "$exe" > "$exe.sha256"
+            cat "$exe.sha256"
+          done
 
       # Creates the tag at the built commit. A re-run of the same workflow run reuses its run
       # number, so then the existing release's assets are replaced instead.

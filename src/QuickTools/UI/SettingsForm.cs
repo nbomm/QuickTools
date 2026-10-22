@@ -13,6 +13,7 @@ internal sealed class SettingsForm : Form
     private readonly TabPage _rightTab = new();
     private readonly TableLayoutPanel _layout;
     private readonly TableLayoutPanel _bottom;
+    private readonly SettingsHeader _header = new() { Margin = new Padding(3, 3, 3, 10) };
     private readonly CheckBox _mirror = new() { Text = "&Right-click menu mirrors the left-click menu", AutoSize = true };
     private readonly CheckBox _startup = new() { Text = "Start QuickTools &when I sign in to Windows", AutoSize = true };
 
@@ -31,7 +32,7 @@ internal sealed class SettingsForm : Form
         Text = "QuickTools Settings";
         Icon = icon;
         StartPosition = FormStartPosition.CenterScreen;
-        Size = new Size(430, 490);
+        Size = new Size(520, 540);
 
         // QuickTools lives only in the tray. Without a taskbar button, minimizing would leave a stray
         // title bar above the taskbar, so there is no minimize button either.
@@ -81,16 +82,18 @@ internal sealed class SettingsForm : Form
         _bottom.Controls.Add(copy, 0, 0);
         _bottom.Controls.Add(actions, 1, 0);
 
-        _layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(8) };
+        _layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(8) };
         _layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        _layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         _layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         _layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         _layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        _layout.Controls.Add(_mirror, 0, 0);
-        _layout.Controls.Add(_startup, 0, 1);
-        _layout.Controls.Add(tabs, 0, 2);
-        _layout.Controls.Add(_bottom, 0, 3);
+        _layout.Controls.Add(_header, 0, 0);
+        _layout.Controls.Add(_mirror, 0, 1);
+        _layout.Controls.Add(_startup, 0, 2);
+        _layout.Controls.Add(tabs, 0, 3);
+        _layout.Controls.Add(_bottom, 0, 4);
         Controls.Add(_layout);
 
         UpdateMirrorState();
@@ -124,6 +127,9 @@ internal sealed class SettingsForm : Form
     /// </summary>
     private void FitToContent()
     {
+        // The header sizes its icon during its own layout; settle that first, or the window would be
+        // measured with a stale header height.
+        _header.PerformLayout();
         PerformLayout();
 
         // Only the editor stretches when the window resizes, so the window can shrink by exactly
@@ -132,9 +138,10 @@ internal sealed class SettingsForm : Form
         int minWidth = Width - (_leftEditor.Width - editorNeeds.Width);
         int minHeight = Height - (_leftEditor.Height - editorNeeds.Height);
 
-        // The checkboxes and the bottom button row must also fit side to side.
+        // The header, the checkboxes and the bottom button row must also fit side to side.
         int otherWidth = new[]
         {
+            _header.PreferredSize.Width + _header.Margin.Horizontal,
             _mirror.PreferredSize.Width + _mirror.Margin.Horizontal,
             _startup.PreferredSize.Width + _startup.Margin.Horizontal,
             // Summed per child: a TableLayoutPanel with a percent column under-reports its preferred width.
