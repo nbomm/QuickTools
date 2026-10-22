@@ -108,4 +108,7 @@ internal static class NativeMethods
 
     [DllImport("user32.dll")]
     public static extern bool DestroyIcon(IntPtr hIcon);
+
+    [DllImport("kernel32.dll")]
+    public static extern bool AttachConsole(uint dwProcessId);
 }

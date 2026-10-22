@@ -13,21 +13,43 @@ internal static class Program
     });
 
     [STAThread]
-    private static void Main()
+    private static int Main(string[] args)
     {
+        // Before anything shows a window (the message box fallback for command-line output).
+        ApplicationConfiguration.Initialize();
+
+        // Handled before the single-instance check, so --help and --version also work while QuickTools runs.
+        var command = CommandLine.Parse(args);
+        switch (command.Action)
+        {
+            case CommandLineAction.ShowHelp:
+                CommandLineOutput.Write(HelpText(), isError: false, s_hiddenOwner.Value);
+                return CommandLine.ExitSuccess;
+
+            case CommandLineAction.ShowVersion:
+                CommandLineOutput.Write(CommandLine.VersionText(AppVersion.Current), isError: false, s_hiddenOwner.Value);
+                return CommandLine.ExitSuccess;
+
+            case CommandLineAction.Error:
+                CommandLineOutput.Write($"{command.Error}\n\n{HelpText()}", isError: true, s_hiddenOwner.Value);
+                return CommandLine.ExitUsageError;
+        }
+
         // A second instance would add a second tray icon, so it just exits.
         using var mutex = new Mutex(initiallyOwned: true, SingleInstanceMutexName, out bool createdNew);
         if (!createdNew)
         {
-            return;
+            return CommandLine.ExitSuccess;
         }
 
-        ApplicationConfiguration.Initialize();
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
         Application.ThreadException += (_, e) =>
             MessageBox.Show(Form.ActiveForm ?? s_hiddenOwner.Value, e.Exception.Message, "QuickTools error",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
 
         Application.Run(new TrayAppContext());
+        return CommandLine.ExitSuccess;
     }
+
+    private static string HelpText() => CommandLine.HelpText(AppVersion.Current, Services.SettingsStore.DefaultPath);
 }

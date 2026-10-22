@@ -58,7 +58,8 @@ internal sealed class SettingsForm : Form
 
         var copy = CreateButton("&Copy left → right", 0, CopyLeftToRight);
         copy.Anchor = AnchorStyles.Left;
-        var save = CreateButton("Save", 80, Save);
+        // OK saves and closes, as in standard Windows settings dialogs.
+        var ok = CreateButton("OK", 80, Save);
         var cancel = CreateButton("Cancel", 80, Close);
         CancelButton = cancel;
 
@@ -72,7 +73,7 @@ internal sealed class SettingsForm : Form
             Margin = Padding.Empty,
         };
         actions.Controls.Add(cancel);
-        actions.Controls.Add(save);
+        actions.Controls.Add(ok);
 
         _bottom = new TableLayoutPanel { AutoSize = true, ColumnCount = 2, Dock = DockStyle.Fill, Margin = Padding.Empty };
         _bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));

@@ -71,6 +71,29 @@ Add `-o <folder>` to choose the output folder. For ARM64 devices, use `-r win-ar
 
 Release versions are `Major.Minor.<workflow run number>`, for example `v1.0.42`. The number is stamped into the exe. Major and Minor come from `<VersionPrefix>` in `src/QuickTools/QuickTools.csproj`; change it (for example to `1.1.0` or `2.0.0`) to start a new series. Because pull-request builds use run numbers too, release numbers can skip.
 
+## Command-line options
+
+```
+QuickTools.exe [option]
+
+  -h, --help, /?   Show help (including the settings file path) and exit.
+  -v, --version    Show the version, e.g. "QuickTools 1.0.2 (995c07a)", and exit.
+```
+
+- With no option, QuickTools starts in the tray. Options are case-insensitive.
+- They also work while QuickTools is already running.
+- All output, including help and version, is written to **stderr**; nothing is written to stdout.
+- Exit codes: `0` for success, `2` for an unknown option or too many arguments (the error is printed with the help).
+
+QuickTools is a Windows (GUI) app, so a terminal doesn't wait for it to finish: its output appears after the next prompt. To get it cleanly, redirect stderr:
+
+```powershell
+QuickTools.exe --version 2>&1 | Write-Output   # PowerShell
+QuickTools.exe --version 2> version.txt        # cmd or PowerShell
+```
+
+When there's no terminal at all (for example a desktop shortcut with `--help`), the text is shown in a message box instead.
+
 ## Using the menus
 
 | Action | Result |
@@ -99,7 +122,7 @@ Open it with **Settings…** from either menu. There is one tab per menu. When *
 | Drop files from Explorer | Adds each file or folder as a shortcut, named after the file. |
 | Test Launch | Runs the selected shortcut exactly as the menu would. |
 
-Changes take effect only when you click **Save**. **Cancel** or Esc discards them.
+Changes are saved and take effect only when you click **OK**. **Cancel** or Esc discards them.
 
 ### Shortcut fields
 
@@ -169,7 +192,7 @@ This logic is in `src/QuickTools/Menus/MenuPlacement.cs`, a single function with
 
 ## Start with Windows and uninstalling
 
-*Start QuickTools when I sign in to Windows* writes the value `QuickTools` under `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`. The value is the quoted path to `QuickTools.exe`. If you move the exe, the option shows as off. Turn it on again in Settings and click Save to register the new location.
+*Start QuickTools when I sign in to Windows* writes the value `QuickTools` under `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`. The value is the quoted path to `QuickTools.exe`. If you move the exe, the option shows as off. Turn it on again in Settings and click OK to register the new location.
 
 To uninstall:
 1. Turn off *Start with Windows*, or delete that registry value.
