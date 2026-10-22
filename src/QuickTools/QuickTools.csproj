@@ -9,6 +9,9 @@
     <!-- Shell icon rects, Screen bounds and menu sizes must all be in the same physical pixels. -->
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <RootNamespace>QuickTools</RootNamespace>
+    <!-- CI releases use Major.Minor from here and the workflow run number as the patch (1.0.<run>).
+         Bump this to start a new minor or major series. -->
+    <VersionPrefix>1.0.0</VersionPrefix>
   </PropertyGroup>
 
   <ItemGroup>

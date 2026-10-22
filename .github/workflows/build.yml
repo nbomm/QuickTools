@@ -1,11 +1,10 @@
 name: Build
 
-# Every push to main (and every pull request) builds, tests and publishes both exes as
-# downloadable workflow artifacts. Pushing a tag such as v1.2.0 also creates a GitHub Release.
+# Every push to main builds, tests and publishes both exes, then creates a GitHub Release
+# v<Major>.<Minor>.<run number> with both attached. Pull requests only build and test.
 on:
   push:
     branches: [main]
-    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -15,7 +14,8 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Never cancel a main build: a cancelled release job could leave a half-created release.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
   DOTNET_NOLOGO: true
@@ -25,25 +25,33 @@ jobs:
   build:
     # WinForms (net9.0-windows) tests need a Windows runner.
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release: ${{ steps.version.outputs.release }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 9.0.x
 
-      # v1.2.0 tag -> 1.2.0; any other build -> 0.0.0-ci.<run number>.
+      # Major.Minor from <VersionPrefix> in the project file, patch = run number.
+      # Pushes to main are releases (1.0.42); anything else is marked -ci (1.0.42-ci).
       - name: Determine version
         id: version
         shell: pwsh
         run: |
-          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -match '^v(\d+\.\d+\.\d+.*)$') {
-            $version = $Matches[1]
-          } else {
-            $version = "0.0.0-ci.$env:GITHUB_RUN_NUMBER"
-          }
+          [xml]$project = Get-Content src/QuickTools/QuickTools.csproj
+          $prefix = @($project.Project.PropertyGroup.VersionPrefix | Where-Object { $_ })[0]
+          if ($prefix -notmatch '^(\d+)\.(\d+)') { throw "VersionPrefix '$prefix' must start with Major.Minor" }
+          $version = "$($Matches[1]).$($Matches[2]).$env:GITHUB_RUN_NUMBER"
+
+          $release = $env:GITHUB_EVENT_NAME -ne 'pull_request' -and $env:GITHUB_REF -eq 'refs/heads/main'
+          if (-not $release) { $version += '-ci' }
+
           "version=$version" >> $env:GITHUB_OUTPUT
-          "Version: $version"
+          "release=$($release.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          "Version: $version (release: $release)"
 
       - name: Build
         run: dotnet build --configuration Release -p:Version=${{ steps.version.outputs.version }}
@@ -65,30 +73,28 @@ jobs:
           -p:Version=${{ steps.version.outputs.version }}
           -o out/framework-dependent
 
-      # Only the exes; the .pdb debug symbols are not shipped.
-      - uses: actions/upload-artifact@v4
+      # Only the exes; the .pdb debug symbols are not shipped. Kept zipped: both files are named
+      # QuickTools.exe, and unzipped uploads are named after the file, so they would clash.
+      - uses: actions/upload-artifact@v7
         with:
           name: QuickTools-${{ steps.version.outputs.version }}-win-x64-self-contained
           path: out/self-contained/QuickTools.exe
           if-no-files-found: error
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: QuickTools-${{ steps.version.outputs.version }}-win-x64-framework-dependent
           path: out/framework-dependent/QuickTools.exe
           if-no-files-found: error
 
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: needs.build.outputs.release == 'true'
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
 
@@ -101,11 +107,16 @@ jobs:
           cp "artifacts/QuickTools-$version-win-x64-framework-dependent/QuickTools.exe" "release/QuickTools-$version-win-x64-framework-dependent.exe"
           ls -l release
 
+      # Creates the tag at the built commit. A re-run of the same workflow run reuses its run
+      # number, so then the existing release's assets are replaced instead.
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >
-          gh release create '${{ github.ref_name }}' release/*
-          --repo '${{ github.repository }}'
-          --title 'QuickTools ${{ github.ref_name }}'
-          --generate-notes
+          TAG: v${{ needs.build.outputs.version }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$TAG" release/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$TAG" release/* --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" --title "QuickTools $TAG" --generate-notes
+          fi

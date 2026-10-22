@@ -66,12 +66,10 @@ Add `-o <folder>` to choose the output folder. For ARM64 devices, use `-r win-ar
 
 [`.github/workflows/build.yml`](.github/workflows/build.yml) runs on a Windows runner:
 
-- **Every push to `main` and every pull request:** builds, runs the tests, and publishes both exes. They can be downloaded from the run's **Artifacts** section on the [Actions](https://github.com/nbomm/QuickTools/actions) page.
-- **Pushing a version tag** creates a GitHub Release with both exes attached and release notes generated from the commits. The version number from the tag is stamped into the exe:
-  ```powershell
-  git tag v1.0.0
-  git push origin v1.0.0
-  ```
+- **Every push to `main`:** builds, runs the tests, publishes both exes, and creates a [GitHub Release](https://github.com/nbomm/QuickTools/releases) with both attached and release notes generated from the commits.
+- **Pull requests:** build and test only. Their exes can be downloaded from the run's **Artifacts** section on the [Actions](https://github.com/nbomm/QuickTools/actions) page.
+
+Release versions are `Major.Minor.<workflow run number>`, for example `v1.0.42`. The number is stamped into the exe. Major and Minor come from `<VersionPrefix>` in `src/QuickTools/QuickTools.csproj`; change it (for example to `1.1.0` or `2.0.0`) to start a new series. Because pull-request builds use run numbers too, release numbers can skip.
 
 ## Using the menus
 
