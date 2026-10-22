@@ -1,5 +1,7 @@
 # QuickTools
 
+[![Build](https://github.com/nbomm/QuickTools/actions/workflows/build.yml/badge.svg)](https://github.com/nbomm/QuickTools/actions/workflows/build.yml)
+
 A small Windows tray launcher. Click the tray icon to get a menu of your own shortcuts: programs, folders, documents, URLs, scripts, `shell:` locations. The left-click and right-click menus can be different, or one can mirror the other.
 
 Everything is configured in a built-in editor or a plain JSON file. QuickTools has no installer, no background service and no network access of its own.
@@ -34,7 +36,12 @@ Everything is configured in a built-in editor or a plain JSON file. QuickTools h
 
 ## Install
 
-Download `QuickTools.exe` from the [Releases](https://github.com/nbomm/QuickTools/releases) page, put it anywhere (for example `%LOCALAPPDATA%\Programs\QuickTools\`), and run it. To start it automatically, turn on **Start QuickTools when I sign in to Windows** in Settings.
+Download an exe from the [Releases](https://github.com/nbomm/QuickTools/releases) page:
+
+- `QuickTools-<version>-win-x64.exe` runs on any Windows 10/11 x64 PC with nothing else installed.
+- `QuickTools-<version>-win-x64-framework-dependent.exe` is much smaller but needs the .NET 9 Desktop Runtime.
+
+Rename it to `QuickTools.exe` if you like, put it anywhere (for example `%LOCALAPPDATA%\Programs\QuickTools\`), and run it. To start it automatically, turn on **Start QuickTools when I sign in to Windows** in Settings.
 
 ## Build from source
 
@@ -54,6 +61,17 @@ To produce a single `QuickTools.exe`:
 | Self-contained | `dotnet publish src/QuickTools -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true` | ~48 MB | No |
 
 Add `-o <folder>` to choose the output folder. For ARM64 devices, use `-r win-arm64` (not tested).
+
+### Continuous integration and releases
+
+[`.github/workflows/build.yml`](.github/workflows/build.yml) runs on a Windows runner:
+
+- **Every push to `main` and every pull request:** builds, runs the tests, and publishes both exes. They can be downloaded from the run's **Artifacts** section on the [Actions](https://github.com/nbomm/QuickTools/actions) page.
+- **Pushing a version tag** creates a GitHub Release with both exes attached and release notes generated from the commits. The version number from the tag is stamped into the exe:
+  ```powershell
+  git tag v1.0.0
+  git push origin v1.0.0
+  ```
 
 ## Using the menus
 

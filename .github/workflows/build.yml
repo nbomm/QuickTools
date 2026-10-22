@@ -1,0 +1,111 @@
+name: Build
+
+# Every push to main (and every pull request) builds, tests and publishes both exes as
+# downloadable workflow artifacts. Pushing a tag such as v1.2.0 also creates a GitHub Release.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build:
+    # WinForms (net9.0-windows) tests need a Windows runner.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      # v1.2.0 tag -> 1.2.0; any other build -> 0.0.0-ci.<run number>.
+      - name: Determine version
+        id: version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -match '^v(\d+\.\d+\.\d+.*)$') {
+            $version = $Matches[1]
+          } else {
+            $version = "0.0.0-ci.$env:GITHUB_RUN_NUMBER"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "Version: $version"
+
+      - name: Build
+        run: dotnet build --configuration Release -p:Version=${{ steps.version.outputs.version }}
+
+      - name: Test
+        run: dotnet test --configuration Release --no-build --logger "console;verbosity=normal"
+
+      - name: Publish self-contained (no .NET runtime needed)
+        run: >
+          dotnet publish src/QuickTools -c Release -r win-x64 --self-contained
+          -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
+          -p:Version=${{ steps.version.outputs.version }}
+          -o out/self-contained
+
+      - name: Publish framework-dependent (needs the .NET 9 Desktop Runtime)
+        run: >
+          dotnet publish src/QuickTools -c Release -r win-x64 --self-contained false
+          -p:PublishSingleFile=true
+          -p:Version=${{ steps.version.outputs.version }}
+          -o out/framework-dependent
+
+      # Only the exes; the .pdb debug symbols are not shipped.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: QuickTools-${{ steps.version.outputs.version }}-win-x64-self-contained
+          path: out/self-contained/QuickTools.exe
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: QuickTools-${{ steps.version.outputs.version }}-win-x64-framework-dependent
+          path: out/framework-dependent/QuickTools.exe
+          if-no-files-found: error
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      # Both artifacts contain a file named QuickTools.exe, so give each a distinct release asset name.
+      - name: Name release assets
+        run: |
+          version='${{ needs.build.outputs.version }}'
+          mkdir release
+          cp "artifacts/QuickTools-$version-win-x64-self-contained/QuickTools.exe" "release/QuickTools-$version-win-x64.exe"
+          cp "artifacts/QuickTools-$version-win-x64-framework-dependent/QuickTools.exe" "release/QuickTools-$version-win-x64-framework-dependent.exe"
+          ls -l release
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create '${{ github.ref_name }}' release/*
+          --repo '${{ github.repository }}'
+          --title 'QuickTools ${{ github.ref_name }}'
+          --generate-notes
