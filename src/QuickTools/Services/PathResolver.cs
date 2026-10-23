@@ -61,6 +61,21 @@ internal static class PathResolver
     }
 
     /// <summary>
+    /// True if the target is a path to an existing folder on a local drive. Network paths are never probed
+    /// (see <see cref="IsNetworkPath"/>), so they are not reported as folders; neither are shell: locations.
+    /// </summary>
+    public static bool IsLocalDirectory(string? target)
+    {
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            return false;
+        }
+
+        string path = Normalize(target);
+        return !IsUri(path) && Path.IsPathRooted(path) && !IsNetworkPath(path) && Directory.Exists(path);
+    }
+
+    /// <summary>
     /// Returns the full path for a target, or null if it can't be found. Network paths are returned
     /// as-is without checking that they exist (see <see cref="IsNetworkPath"/>).
     /// </summary>

@@ -22,12 +22,20 @@ internal sealed class SettingsStore(string filePath)
     /// <summary>Set by <see cref="Load"/> when the file was unreadable and defaults were used instead.</summary>
     public string? LastLoadError { get; private set; }
 
+    /// <summary>
+    /// Set by <see cref="Load"/> when there was no settings file, so the defaults were created. An unreadable or
+    /// invalid file isn't a first run; that has its own <see cref="LastLoadError"/>.
+    /// </summary>
+    public bool IsFirstRun { get; private set; }
+
     public AppSettings Load()
     {
         LastLoadError = null;
+        IsFirstRun = false;
 
         if (!File.Exists(filePath))
         {
+            IsFirstRun = true;
             return SaveDefaults();
         }
 
@@ -105,6 +113,7 @@ internal sealed class SettingsStore(string filePath)
     // Explicit JSON nulls override property initializers, so repair them here.
     private static void Normalize(AppSettings settings)
     {
+        settings.Hotkey ??= string.Empty;
         settings.LeftMenu ??= [];
         settings.RightMenu ??= [];
         Normalize(settings.LeftMenu);

@@ -32,6 +32,41 @@ public sealed class SettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public void MissingFile_IsFirstRun_ButOnlyUntilTheFileExists()
+    {
+        var store = new SettingsStore(SettingsPath);
+
+        store.Load();
+        Assert.True(store.IsFirstRun);
+
+        store.Load();
+        Assert.False(store.IsFirstRun);
+    }
+
+    [Fact]
+    public void ExistingFile_IsNotFirstRun()
+    {
+        var store = new SettingsStore(SettingsPath);
+        store.Save(AppSettings.CreateDefault());
+
+        store.Load();
+
+        Assert.False(store.IsFirstRun);
+    }
+
+    [Fact]
+    public void CorruptFile_IsNotFirstRun()
+    {
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(SettingsPath, "{ not json");
+        var store = new SettingsStore(SettingsPath);
+
+        store.Load();
+
+        Assert.False(store.IsFirstRun);
+    }
+
+    [Fact]
     public void SaveThenLoad_RoundTripsNestedFolders()
     {
         var store = new SettingsStore(SettingsPath);
@@ -65,6 +100,34 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Empty(dev.Children[1].Children!);
         Assert.Equal(EntryKind.Separator, loaded.LeftMenu[1].Kind);
         Assert.Equal("notepad.exe", loaded.RightMenu[0].Target);
+    }
+
+    [Fact]
+    public void NewSettings_UseTheDefaultHotkey()
+    {
+        Assert.Equal("Ctrl+Alt+Q", new SettingsStore(SettingsPath).Load().Hotkey);
+    }
+
+    [Theory]
+    [InlineData("Ctrl+Shift+F5")]
+    [InlineData("")] // turned off
+    public void Hotkey_RoundTrips(string hotkey)
+    {
+        var store = new SettingsStore(SettingsPath);
+        var settings = store.Load();
+        settings.Hotkey = hotkey;
+        store.Save(settings);
+
+        Assert.Equal(hotkey, store.Load().Hotkey);
+    }
+
+    [Fact]
+    public void SettingsFileWithoutHotkey_GetsTheDefault()
+    {
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(SettingsPath, """{ "mirrorMenus": true, "leftMenu": [], "rightMenu": [] }""");
+
+        Assert.Equal("Ctrl+Alt+Q", new SettingsStore(SettingsPath).Load().Hotkey);
     }
 
     [Fact]
@@ -105,11 +168,12 @@ public sealed class SettingsStoreTests : IDisposable
     public void ExplicitNulls_AreNormalized()
     {
         Directory.CreateDirectory(_directory);
-        File.WriteAllText(SettingsPath, """{ "mirrorMenus": false, "leftMenu": null, "rightMenu": [ { "kind": "Folder", "name": "F", "children": null } ] }""");
+        File.WriteAllText(SettingsPath, """{ "mirrorMenus": false, "hotkey": null, "leftMenu": null, "rightMenu": [ { "kind": "Folder", "name": "F", "children": null } ] }""");
 
         var settings = new SettingsStore(SettingsPath).Load();
 
         Assert.False(settings.MirrorMenus);
+        Assert.Equal(string.Empty, settings.Hotkey);
         Assert.Empty(settings.LeftMenu);
         Assert.NotNull(settings.RightMenu[0].Children);
     }

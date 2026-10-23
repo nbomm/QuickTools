@@ -5,26 +5,32 @@ namespace QuickTools.UI;
 
 internal sealed class SettingsForm : Form
 {
-    private readonly Func<AppSettings, bool?, bool> _apply;
+    private readonly Func<AppSettings, bool?, bool?, bool> _apply;
     private readonly bool _startupInitially;
+    private readonly bool _pinMenuInitially;
     private readonly IconCache _icons = new();
     private readonly MenuEditor _leftEditor;
     private readonly MenuEditor _rightEditor;
     private readonly TabPage _rightTab = new();
     private readonly TableLayoutPanel _layout;
     private readonly TableLayoutPanel _bottom;
+    private readonly TableLayoutPanel _hotkeyRow;
+    private readonly HotkeyBox _hotkey = new() { Width = 150 };
     private readonly SettingsHeader _header = new() { Margin = new Padding(3, 3, 3, 10) };
     private readonly CheckBox _mirror = new() { Text = "&Right-click menu mirrors the left-click menu", AutoSize = true };
     private readonly CheckBox _startup = new() { Text = "Start QuickTools &when I sign in to Windows", AutoSize = true };
+    private readonly CheckBox _pinMenu = new() { Text = "Add \"&Pin to QuickTools\" to File Explorer's right-click menu", AutoSize = true };
 
     /// <param name="apply">
-    /// Saves new settings; receives the new startup setting only if the user changed it.
+    /// Saves new settings; receives the new startup and Explorer menu settings only if the user changed them.
     /// Returns false if saving failed, in which case the window stays open.
     /// </param>
-    public SettingsForm(AppSettings settings, bool startWithWindows, Launcher launcher, Icon icon, Func<AppSettings, bool?, bool> apply)
+    public SettingsForm(AppSettings settings, bool startWithWindows, bool pinMenuEnabled, Launcher launcher, Icon icon,
+        Func<AppSettings, bool?, bool?, bool> apply)
     {
         _apply = apply;
         _startupInitially = startWithWindows;
+        _pinMenuInitially = pinMenuEnabled;
 
         SuspendLayout();
         AutoScaleDimensions = new SizeF(7F, 15F);
@@ -56,6 +62,18 @@ internal sealed class SettingsForm : Form
         _mirror.Checked = settings.MirrorMenus;
         _mirror.CheckedChanged += (_, _) => UpdateMirrorState();
         _startup.Checked = startWithWindows;
+        _pinMenu.Checked = pinMenuEnabled;
+        _hotkey.Value = Hotkey.TryParse(settings.Hotkey, out Hotkey hotkey) ? hotkey : null;
+
+        var hotkeyLabel = new Label { Text = "&Hotkey to open the menu at the mouse pointer:", AutoSize = true, Anchor = AnchorStyles.Left };
+        var clearHotkey = CreateButton("Clear", 0, () => _hotkey.Value = null);
+        clearHotkey.Anchor = AnchorStyles.Left;
+        _hotkey.Anchor = AnchorStyles.Left;
+
+        _hotkeyRow = new TableLayoutPanel { AutoSize = true, ColumnCount = 3, RowCount = 1, Anchor = AnchorStyles.Left, Margin = new Padding(3, 3, 3, 8) };
+        _hotkeyRow.Controls.Add(hotkeyLabel, 0, 0);
+        _hotkeyRow.Controls.Add(_hotkey, 1, 0);
+        _hotkeyRow.Controls.Add(clearHotkey, 2, 0);
 
         var copy = CreateButton("&Copy left → right", 0, CopyLeftToRight);
         copy.Anchor = AnchorStyles.Left;
@@ -82,8 +100,10 @@ internal sealed class SettingsForm : Form
         _bottom.Controls.Add(copy, 0, 0);
         _bottom.Controls.Add(actions, 1, 0);
 
-        _layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(8) };
+        _layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 7, Padding = new Padding(8) };
         _layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        _layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        _layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         _layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         _layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         _layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -92,8 +112,10 @@ internal sealed class SettingsForm : Form
         _layout.Controls.Add(_header, 0, 0);
         _layout.Controls.Add(_mirror, 0, 1);
         _layout.Controls.Add(_startup, 0, 2);
-        _layout.Controls.Add(tabs, 0, 3);
-        _layout.Controls.Add(_bottom, 0, 4);
+        _layout.Controls.Add(_pinMenu, 0, 3);
+        _layout.Controls.Add(_hotkeyRow, 0, 4);
+        _layout.Controls.Add(tabs, 0, 5);
+        _layout.Controls.Add(_bottom, 0, 6);
         Controls.Add(_layout);
 
         UpdateMirrorState();
@@ -144,6 +166,8 @@ internal sealed class SettingsForm : Form
             _header.PreferredSize.Width + _header.Margin.Horizontal,
             _mirror.PreferredSize.Width + _mirror.Margin.Horizontal,
             _startup.PreferredSize.Width + _startup.Margin.Horizontal,
+            _pinMenu.PreferredSize.Width + _pinMenu.Margin.Horizontal,
+            _hotkeyRow.PreferredSize.Width + _hotkeyRow.Margin.Horizontal,
             // Summed per child: a TableLayoutPanel with a percent column under-reports its preferred width.
             _bottom.Controls.Cast<Control>().Sum(c => c.PreferredSize.Width + c.Margin.Horizontal) + _bottom.Margin.Horizontal,
         }.Max() + _layout.Padding.Horizontal;
@@ -193,14 +217,16 @@ internal sealed class SettingsForm : Form
         var settings = new AppSettings
         {
             MirrorMenus = _mirror.Checked,
+            Hotkey = _hotkey.Value?.ToString() ?? string.Empty,
             LeftMenu = _leftEditor.GetEntries(),
             RightMenu = _rightEditor.GetEntries(),
         };
 
-        // Only touch the Run key if the user changed the setting.
+        // Only touch the registry for the settings the user changed.
         bool? startup = _startup.Checked != _startupInitially ? _startup.Checked : null;
+        bool? pinMenu = _pinMenu.Checked != _pinMenuInitially ? _pinMenu.Checked : null;
 
-        if (_apply(settings, startup))
+        if (_apply(settings, startup, pinMenu))
         {
             Close();
         }

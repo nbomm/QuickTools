@@ -10,11 +10,14 @@ internal sealed class IconCache : IDisposable
     private readonly Dictionary<string, Image?> _cache = new(StringComparer.OrdinalIgnoreCase);
     private Image? _folderIcon;
     private Image? _settingsIcon;
+    private Image? _exitIcon;
     private Image? _shieldIcon;
 
     public Image FolderIcon => _folderIcon ??= StockIcon(StockIconId.Folder);
 
-    public Image SettingsIcon => _settingsIcon ??= StockIcon(StockIconId.Settings);
+    public Image SettingsIcon => _settingsIcon ??= GlyphIcon('');
+
+    public Image ExitIcon => _exitIcon ??= GlyphIcon('', StockIconId.Error);
 
     private Image ShieldIcon => _shieldIcon ??= StockIcon(StockIconId.Shield);
 
@@ -52,6 +55,31 @@ internal sealed class IconCache : IDisposable
         return image;
     }
 
+    // These show the file's own icon, so each needs its own lookup; every other type shares its extension's icon.
+    private static readonly HashSet<string> s_ownIconExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".exe", ".lnk", ".ico", ".url", ".scr", ".appref-ms",
+    };
+
+    /// <summary>
+    /// The icon for a file in a folder submenu. Most types are looked up by extension, which doesn't touch the disk,
+    /// so listing a big folder stays fast.
+    /// </summary>
+    public Image? GetFileIcon(string path)
+    {
+        string extension = Path.GetExtension(path);
+        bool ownIcon = s_ownIconExtensions.Contains(extension);
+        string key = ownIcon ? path : "ext|" + extension;
+
+        if (!_cache.TryGetValue(key, out var image))
+        {
+            image = ownIcon ? ShellIcon(path, 0) : ShellIcon(extension.Length > 0 ? extension : "file", SHGFI_USEFILEATTRIBUTES);
+            _cache[key] = image;
+        }
+
+        return image;
+    }
+
     public void Clear()
     {
         foreach (var image in _cache.Values)
@@ -67,6 +95,7 @@ internal sealed class IconCache : IDisposable
         Clear();
         _folderIcon?.Dispose();
         _settingsIcon?.Dispose();
+        _exitIcon?.Dispose();
         _shieldIcon?.Dispose();
     }
 
@@ -123,7 +152,33 @@ internal sealed class IconCache : IDisposable
             return ShellIcon(".url", SHGFI_USEFILEATTRIBUTES);
         }
 
+        // shell:Downloads, shell:AppsFolder\<app id> and the like have no file path, only a shell item.
+        if (normalized.StartsWith("shell:", StringComparison.OrdinalIgnoreCase))
+        {
+            return ShellItemIcon(normalized);
+        }
+
         return null;
+    }
+
+    private static Image? ShellItemIcon(string parsingName)
+    {
+        if (SHParseDisplayName(parsingName, IntPtr.Zero, out IntPtr pidl, 0, out _) < 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            var info = new SHFILEINFOW();
+            IntPtr result = SHGetFileInfoW(pidl, 0, ref info, (uint)Marshal.SizeOf<SHFILEINFOW>(),
+                SHGFI_PIDL | SHGFI_ICON | SHGFI_LARGEICON);
+            return result == IntPtr.Zero ? null : TakeIcon(info.hIcon);
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(pidl);
+        }
     }
 
     private static Image? ShellIcon(string path, uint extraFlags, uint attributes = FILE_ATTRIBUTE_NORMAL)
@@ -134,20 +189,49 @@ internal sealed class IconCache : IDisposable
         IntPtr result = SHGetFileInfoW(path, attributes, ref info, (uint)Marshal.SizeOf<SHFILEINFOW>(),
             SHGFI_ICON | SHGFI_LARGEICON | extraFlags);
 
-        if (result == IntPtr.Zero || info.hIcon == IntPtr.Zero)
+        return result == IntPtr.Zero ? null : TakeIcon(info.hIcon);
+    }
+
+    /// <summary>Converts a shell icon to a bitmap (keeping its alpha) and destroys the handle.</summary>
+    private static Image? TakeIcon(IntPtr hIcon)
+    {
+        if (hIcon == IntPtr.Zero)
         {
             return null;
         }
 
         try
         {
-            using var icon = Icon.FromHandle(info.hIcon);
+            using var icon = Icon.FromHandle(hIcon);
             return icon.ToBitmap();
         }
         finally
         {
-            DestroyIcon(info.hIcon);
+            DestroyIcon(hIcon);
         }
+    }
+
+    /// <summary>
+    /// Draws a glyph from the Segoe icon font (Windows 11 or 10), or falls back to a stock icon if neither exists.
+    /// The stock Settings icon is blank on some systems, so the gear is drawn rather than requested.
+    /// </summary>
+    private static Image GlyphIcon(char glyph, StockIconId fallback = StockIconId.Settings)
+    {
+        const int size = 32;
+        string? family = new[] { "Segoe Fluent Icons", "Segoe MDL2 Assets" }
+            .FirstOrDefault(name => FontFamily.Families.Any(f => f.Name == name));
+        if (family is null)
+        {
+            return StockIcon(fallback);
+        }
+
+        var bitmap = new Bitmap(size, size);
+        using var g = Graphics.FromImage(bitmap);
+        using var font = new Font(family, size * 0.7f, FontStyle.Regular, GraphicsUnit.Pixel);
+        using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+        g.DrawString(glyph.ToString(), font, SystemBrushes.ControlText, new RectangleF(0, 0, size, size), format);
+        return bitmap;
     }
 
     private static Image StockIcon(StockIconId id)

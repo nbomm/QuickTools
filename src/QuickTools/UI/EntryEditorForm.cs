@@ -1,4 +1,5 @@
 using QuickTools.Model;
+using QuickTools.Services;
 
 namespace QuickTools.UI;
 
@@ -9,6 +10,7 @@ internal sealed class EntryEditorForm : Form
 
     private readonly MenuEntry _entry;
     private readonly bool _isFolder;
+    private readonly IconCache _icons;
     private readonly TextBox _name = CreateTextBox();
     private readonly TextBox _target = CreateTextBox();
     private readonly TextBox _arguments = CreateTextBox();
@@ -17,10 +19,11 @@ internal sealed class EntryEditorForm : Form
     private readonly CheckBox _runAsAdmin = new() { Text = "Run as administrator", AutoSize = true };
     private readonly TableLayoutPanel _grid;
 
-    public EntryEditorForm(MenuEntry entry, bool isNew)
+    public EntryEditorForm(MenuEntry entry, bool isNew, IconCache icons)
     {
         _entry = entry;
         _isFolder = entry.Kind == EntryKind.Folder;
+        _icons = icons;
 
         SuspendLayout();
         AutoScaleDimensions = new SizeF(7F, 15F);
@@ -63,7 +66,17 @@ internal sealed class EntryEditorForm : Form
 
             AddRow("&Target:", _target,
                 CreateButton("File…", BrowseTargetFile),
-                CreateButton("Folder…", BrowseTargetFolder));
+                CreateButton("Folder…", BrowseTargetFolder),
+                CreateButton("App…", BrowseTargetApp));
+            AddRow(string.Empty, new Label
+            {
+                Text = "A folder as the target becomes a submenu listing its contents. To just open a folder, " +
+                    "use explorer.exe as the target and the folder as the argument.",
+                UseMnemonic = false,
+                AutoSize = true,
+                MaximumSize = new Size(TextBoxWidth, 0),
+                ForeColor = SystemColors.GrayText,
+            });
             AddRow("&Arguments:", _arguments);
             AddRow("&Start in:", _workingDirectory, CreateButton("Browse…", BrowseWorkingDirectory));
             AddRow("&Icon:", _iconPath, CreateButton("Browse…", BrowseIcon));
@@ -171,6 +184,14 @@ internal sealed class EntryEditorForm : Form
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
             SetTarget(dialog.SelectedPath, new DirectoryInfo(dialog.SelectedPath).Name);
+        }
+    }
+
+    private void BrowseTargetApp()
+    {
+        if (AppPickerForm.Pick(this, _icons, multiSelect: false) is [var app])
+        {
+            SetTarget(app.Target, app.MenuName);
         }
     }
 

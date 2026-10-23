@@ -16,13 +16,18 @@ internal sealed class TrayAppContext : ApplicationContext
     private readonly Icon _appIcon = AppIcon.Create();
     private readonly MenuBuilder _menuBuilder;
     private readonly TrayIcon _tray;
+    private readonly HotkeyListener _hotkeys = new();
 
     private AppSettings _settings;
     private ContextMenuStrip _leftMenu = null!;
     private ContextMenuStrip _rightMenu = null!;
     private SettingsForm? _settingsForm;
+    private PinChannel.Server? _pinServer;
+    private readonly Queue<string> _pendingPins = new();
+    private bool _pinning;
 
-    public TrayAppContext()
+    /// <param name="pinPath">A file or folder to offer to pin right after startup, if started by "Pin to QuickTools".</param>
+    public TrayAppContext(string? pinPath = null)
     {
         _settings = _store.Load();
         _menuBuilder = new MenuBuilder(_icons, Launch, ShowSettings, ExitThread);
@@ -31,10 +36,29 @@ internal sealed class TrayAppContext : ApplicationContext
         _tray = new TrayIcon(_appIcon, "QuickTools");
         _tray.LeftClick += (_, e) => ShowMenu(_leftMenu, e.Anchor);
         _tray.RightClick += (_, e) => ShowMenu(_rightMenu, e.Anchor);
+        _hotkeys.Pressed += (_, _) => ShowMenuAtCursor(_leftMenu);
+        string? hotkeyError = RegisterHotkey();
+
+        // Paths arrive on a pipe thread; hand them to the UI thread, where the menus and dialogs live.
+        var ui = SynchronizationContext.Current!;
+        _pinServer = new PinChannel.Server(path => ui.Post(_ => Pin(path), null));
+        if (pinPath is not null)
+        {
+            ui.Post(_ => Pin(pinPath), null);
+        }
+        else if (_store.IsFirstRun)
+        {
+            // Nothing else tells a new user where to start: the app is only a tray icon, which may be hidden in the overflow.
+            ui.Post(_ => ShowSettings(), null);
+        }
 
         if (_store.LastLoadError is { } error)
         {
             _tray.ShowBalloon("QuickTools", error, ToolTipIcon.Warning);
+        }
+        else if (hotkeyError is not null)
+        {
+            _tray.ShowBalloon("QuickTools hotkey", hotkeyError, ToolTipIcon.Warning);
         }
         else if (IsElevated())
         {
@@ -51,6 +75,8 @@ internal sealed class TrayAppContext : ApplicationContext
 
     protected override void ExitThreadCore()
     {
+        _pinServer?.Dispose();
+        _hotkeys.Dispose();
         _settingsForm?.Close();
         _tray.Dispose();
         DisposeMenus();
@@ -78,12 +104,119 @@ internal sealed class TrayAppContext : ApplicationContext
         menu.Show(location);
     }
 
+    /// <summary>Opens the menu at the mouse pointer, for the hotkey.</summary>
+    private void ShowMenuAtCursor(ContextMenuStrip menu)
+    {
+        if (_leftMenu.Visible || _rightMenu.Visible)
+        {
+            return;
+        }
+
+        Point cursor = Cursor.Position;
+        Rectangle workArea = Screen.FromPoint(cursor).WorkingArea;
+        Point location = MenuPlacement.CalculateAtPoint(cursor, menu.GetPreferredSize(Size.Empty), workArea);
+
+        _tray.BringToForeground();
+        menu.Show(location);
+    }
+
+    /// <summary>Applies the hotkey setting. Returns a message for the user if it couldn't be registered, or null.</summary>
+    private string? RegisterHotkey()
+    {
+        if (string.IsNullOrWhiteSpace(_settings.Hotkey))
+        {
+            _hotkeys.TryRegister(null);
+            return null;
+        }
+
+        if (!Hotkey.TryParse(_settings.Hotkey, out Hotkey hotkey))
+        {
+            _hotkeys.TryRegister(null);
+            return $"\"{_settings.Hotkey}\" isn't a valid hotkey, so it is turned off.";
+        }
+
+        return _hotkeys.TryRegister(hotkey)
+            ? null
+            : $"{hotkey} is already used by Windows or another program, so it can't open the menu.";
+    }
+
     private void Launch(MenuEntry entry)
     {
         if (!_launcher.TryLaunch(entry, out string? error))
         {
             _tray.ShowBalloon($"Couldn't open {entry.Name}", error ?? "Unknown error.", ToolTipIcon.Error);
         }
+    }
+
+    /// <summary>Queues a path from "Pin to QuickTools". Several can arrive at once (multi-select), and a
+    /// dialog pumps messages while open, so they are handled one at a time.</summary>
+    private void Pin(string path)
+    {
+        _pendingPins.Enqueue(path);
+        if (_pinning)
+        {
+            return;
+        }
+
+        _pinning = true;
+        try
+        {
+            while (_pendingPins.TryDequeue(out string? next))
+            {
+                PinOne(next);
+            }
+        }
+        finally
+        {
+            _pinning = false;
+        }
+    }
+
+    private void PinOne(string path)
+    {
+        // The Settings window holds its own copy of the menus and would overwrite a pin when OK is clicked.
+        if (_settingsForm is { IsDisposed: false })
+        {
+            _tray.ShowBalloon("Couldn't pin", "Close the Settings window first, then pin again.", ToolTipIcon.Warning);
+            return;
+        }
+
+        bool isDirectory = Directory.Exists(path);
+        if (!isDirectory && !File.Exists(path))
+        {
+            _tray.ShowBalloon("Couldn't pin", $"{path} doesn't exist.", ToolTipIcon.Warning);
+            return;
+        }
+
+        // Names are menu text, where & marks a keyboard key.
+        string name = (isDirectory ? Path.GetFileName(path.TrimEnd('\\')) : Path.GetFileNameWithoutExtension(path)).Replace("&", "&&");
+        var entry = MenuEntry.Shortcut(name.Length > 0 ? name : path, path);
+
+        using var editor = new EntryEditorForm(entry, isNew: true, _icons) { TopMost = true };
+        _tray.BringToForeground();
+        if (editor.ShowDialog() != DialogResult.OK)
+        {
+            return;
+        }
+
+        var settings = _settings;
+        settings.LeftMenu.Add(entry);
+        if (!settings.MirrorMenus)
+        {
+            settings.RightMenu.Add(entry.Clone());
+        }
+
+        try
+        {
+            _store.Save(settings);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _tray.ShowBalloon("Couldn't save settings", ex.Message, ToolTipIcon.Error);
+        }
+
+        RebuildMenus();
+        _tray.ShowBalloon("Pinned to QuickTools", entry.Name.Replace("&&", "&"), ToolTipIcon.Info);
     }
 
     private void ShowSettings()
@@ -99,7 +232,7 @@ internal sealed class TrayAppContext : ApplicationContext
             return;
         }
 
-        var form = new SettingsForm(_settings, StartupManager.IsEnabled(), _launcher, _appIcon, ApplySettings);
+        var form = new SettingsForm(_settings, StartupManager.IsEnabled(), ShellIntegration.IsEnabled(), _launcher, _appIcon, ApplySettings);
         form.FormClosed += (_, _) =>
         {
             if (_settingsForm == form)
@@ -114,7 +247,8 @@ internal sealed class TrayAppContext : ApplicationContext
     }
 
     /// <param name="startWithWindows">The new startup setting, or null if the user didn't change it.</param>
-    private bool ApplySettings(AppSettings settings, bool? startWithWindows)
+    /// <param name="pinMenu">The new "Pin to QuickTools" Explorer item setting, or null if the user didn't change it.</param>
+    private bool ApplySettings(AppSettings settings, bool? startWithWindows, bool? pinMenu)
     {
         try
         {
@@ -132,6 +266,12 @@ internal sealed class TrayAppContext : ApplicationContext
         _settings = settings;
         RebuildMenus();
 
+        if (RegisterHotkey() is { } hotkeyError)
+        {
+            MessageBox.Show(_settingsForm, $"Your settings were saved, but the hotkey doesn't work: {hotkeyError}",
+                "QuickTools", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+
         if (startWithWindows is { } enabled)
         {
             try
@@ -141,6 +281,19 @@ internal sealed class TrayAppContext : ApplicationContext
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
             {
                 MessageBox.Show(_settingsForm, $"Your menus were saved, but the \"Start with Windows\" setting couldn't be changed.\n\n{ex.Message}",
+                    "QuickTools", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        if (pinMenu is { } pinEnabled)
+        {
+            try
+            {
+                ShellIntegration.SetEnabled(pinEnabled);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+            {
+                MessageBox.Show(_settingsForm, $"Your menus were saved, but the \"{ShellIntegration.MenuText}\" Explorer item couldn't be changed.\n\n{ex.Message}",
                     "QuickTools", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }

@@ -70,6 +70,7 @@ internal sealed class MenuEditor : UserControl
             AutoScroll = true,
         };
         _buttons.Controls.Add(CreateButton("Add &Shortcut…", AddShortcut));
+        _buttons.Controls.Add(CreateButton("Add &App…", AddApps));
         _buttons.Controls.Add(CreateButton("Add &Folder…", AddFolder));
         _buttons.Controls.Add(CreateButton("Add Se&parator", AddSeparator));
         _buttons.Controls.Add(_edit = CreateButton("&Edit…", EditSelected));
@@ -286,17 +287,25 @@ internal sealed class MenuEditor : UserControl
     private void AddShortcut()
     {
         var entry = new MenuEntry { Kind = EntryKind.Shortcut };
-        using var editor = new EntryEditorForm(entry, isNew: true);
+        using var editor = new EntryEditorForm(entry, isNew: true, _icons);
         if (editor.ShowDialog(this) == DialogResult.OK)
         {
             InsertNode(CreateNode(entry), _tree.SelectedNode);
         }
     }
 
+    private void AddApps()
+    {
+        if (AppPickerForm.Pick(this, _icons, multiSelect: true) is { } apps)
+        {
+            InsertShortcuts(apps.Select(app => MenuEntry.Shortcut(app.MenuName, app.Target)), _tree.SelectedNode);
+        }
+    }
+
     private void AddFolder()
     {
         var entry = MenuEntry.Folder(string.Empty);
-        using var editor = new EntryEditorForm(entry, isNew: true);
+        using var editor = new EntryEditorForm(entry, isNew: true, _icons);
         if (editor.ShowDialog(this) == DialogResult.OK)
         {
             InsertNode(CreateNode(entry), _tree.SelectedNode);
@@ -326,6 +335,17 @@ internal sealed class MenuEditor : UserControl
         _tree.Focus();
     }
 
+    /// <summary>Inserts several shortcuts at one place, keeping their order.</summary>
+    private void InsertShortcuts(IEnumerable<MenuEntry> entries, TreeNode? target)
+    {
+        foreach (var entry in entries)
+        {
+            var node = CreateNode(entry);
+            InsertNode(node, target);
+            target = node;
+        }
+    }
+
     private void EditSelected()
     {
         if (_tree.SelectedNode is not { } node || EntryOf(node).Kind == EntryKind.Separator)
@@ -334,7 +354,7 @@ internal sealed class MenuEditor : UserControl
         }
 
         var copy = EntryOf(node).Clone();
-        using var editor = new EntryEditorForm(copy, isNew: false);
+        using var editor = new EntryEditorForm(copy, isNew: false, _icons);
         if (editor.ShowDialog(this) == DialogResult.OK)
         {
             ApplyEntry(node, copy);
@@ -439,14 +459,8 @@ internal sealed class MenuEditor : UserControl
 
         if (e.Data?.GetData(DataFormats.FileDrop) is string[] paths)
         {
-            foreach (string path in paths)
-            {
-                string name = Directory.Exists(path) ? new DirectoryInfo(path).Name : Path.GetFileNameWithoutExtension(path);
-                var node = CreateNode(MenuEntry.Shortcut(name, path));
-                InsertNode(node, target);
-                target = node; // keep multiple dropped files in their original order
-            }
-
+            InsertShortcuts(paths.Select(path => MenuEntry.Shortcut(
+                Directory.Exists(path) ? new DirectoryInfo(path).Name : Path.GetFileNameWithoutExtension(path), path)), target);
             return;
         }
 

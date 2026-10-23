@@ -47,6 +47,29 @@ public class CommandLineTests
     }
 
     [Fact]
+    public void Pin_CarriesThePath()
+    {
+        var result = CommandLine.Parse(["--pin", @"C:\Tools\My App.exe"]);
+
+        Assert.Equal(CommandLineAction.Pin, result.Action);
+        Assert.Equal(@"C:\Tools\My App.exe", result.Path);
+    }
+
+    [Theory]
+    [InlineData("--PIN")]
+    [InlineData("--Pin")]
+    public void Pin_IsCaseInsensitive(string option) =>
+        Assert.Equal(CommandLineAction.Pin, CommandLine.Parse([option, @"C:\x"]).Action);
+
+    [Fact]
+    public void Pin_WithoutExactlyOnePath_IsAnError()
+    {
+        Assert.Equal(CommandLineAction.Error, CommandLine.Parse(["--pin"]).Action);
+        Assert.Equal(CommandLineAction.Error, CommandLine.Parse(["--pin", " "]).Action);
+        Assert.Equal(CommandLineAction.Error, CommandLine.Parse(["--pin", "a", "b"]).Action);
+    }
+
+    [Fact]
     public void HelpText_ListsEveryOptionAndTheSettingsPath()
     {
         string help = CommandLine.HelpText("1.2.3 (abcdef1)", @"C:\Users\me\AppData\Roaming\QuickTools\settings.json");
@@ -54,6 +77,7 @@ public class CommandLineTests
         Assert.StartsWith("QuickTools 1.2.3 (abcdef1)", help);
         Assert.Contains("-h, --help, /?", help);
         Assert.Contains("-v, --version", help);
+        Assert.Contains("--pin <path>", help);
         Assert.Contains(@"C:\Users\me\AppData\Roaming\QuickTools\settings.json", help);
     }
 

@@ -12,6 +12,15 @@ internal sealed class AppSettings
     /// </summary>
     public bool MirrorMenus { get; set; } = true;
 
+    public const string DefaultHotkey = "Ctrl+Alt+Q";
+
+    /// <summary>
+    /// Global hotkey, as text such as "Ctrl+Alt+Q" (see <see cref="Hotkey"/>), that opens the left-click menu
+    /// at the mouse pointer. Empty means no hotkey. A settings file that doesn't mention it gets
+    /// <see cref="DefaultHotkey"/>, so existing users get the feature too; an empty value turns it off.
+    /// </summary>
+    public string Hotkey { get; set; } = DefaultHotkey;
+
     public List<MenuEntry> LeftMenu { get; set; } = [];
 
     public List<MenuEntry> RightMenu { get; set; } = [];

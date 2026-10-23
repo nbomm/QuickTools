@@ -6,6 +6,8 @@ internal static class NativeMethods
 {
     public const int WM_APP = 0x8000;
     public const int WM_CONTEXTMENU = 0x007B;
+    public const int WM_HOTKEY = 0x0312;
+    public const uint MOD_NOREPEAT = 0x4000;
     public const int NIN_SELECT = 0x0400;
     public const int NIN_KEYSELECT = 0x0401;
 
@@ -30,6 +32,7 @@ internal static class NativeMethods
     public const uint SHGFI_ICON = 0x100;
     public const uint SHGFI_LARGEICON = 0x0;
     public const uint SHGFI_USEFILEATTRIBUTES = 0x10;
+    public const uint SHGFI_PIDL = 0x8;
     public const uint FILE_ATTRIBUTE_DIRECTORY = 0x10;
     public const uint FILE_ATTRIBUTE_NORMAL = 0x80;
 
@@ -97,11 +100,24 @@ internal static class NativeMethods
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     public static extern IntPtr SHGetFileInfoW(string pszPath, uint dwFileAttributes, ref SHFILEINFOW psfi, uint cbFileInfo, uint uFlags);
 
+    /// <summary>The SHGFI_PIDL form: the item is an ID list rather than a path.</summary>
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    public static extern IntPtr SHGetFileInfoW(IntPtr pidl, uint dwFileAttributes, ref SHFILEINFOW psfi, uint cbFileInfo, uint uFlags);
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    public static extern int SHParseDisplayName(string pszName, IntPtr pbc, out IntPtr ppidl, uint sfgaoIn, out uint psfgaoOut);
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern uint RegisterWindowMessageW(string lpString);
 
     [DllImport("user32.dll")]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+    [DllImport("user32.dll")]
+    public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 
     [DllImport("user32.dll")]
     public static extern bool ChangeWindowMessageFilterEx(IntPtr hWnd, uint message, uint action, IntPtr pChangeFilterStruct);

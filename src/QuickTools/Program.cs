@@ -1,3 +1,5 @@
+using QuickTools.Services;
+
 namespace QuickTools;
 
 internal static class Program
@@ -39,6 +41,13 @@ internal static class Program
         using var mutex = new Mutex(initiallyOwned: true, SingleInstanceMutexName, out bool createdNew);
         if (!createdNew)
         {
+            if (command.Action == CommandLineAction.Pin && !PinChannel.TrySend(command.Path!))
+            {
+                MessageBox.Show(s_hiddenOwner.Value, "QuickTools didn't respond, so the item wasn't pinned.", "QuickTools",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return CommandLine.ExitUsageError;
+            }
+
             return CommandLine.ExitSuccess;
         }
 
@@ -47,9 +56,10 @@ internal static class Program
             MessageBox.Show(Form.ActiveForm ?? s_hiddenOwner.Value, e.Exception.Message, "QuickTools error",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
 
-        Application.Run(new TrayAppContext());
+        // Started by "Pin to QuickTools" with nothing running: become the tray instance, then offer the pin.
+        Application.Run(new TrayAppContext(command.Action == CommandLineAction.Pin ? command.Path : null));
         return CommandLine.ExitSuccess;
     }
 
-    private static string HelpText() => CommandLine.HelpText(AppVersion.Current, Services.SettingsStore.DefaultPath);
+    private static string HelpText() => CommandLine.HelpText(AppVersion.Current, SettingsStore.DefaultPath);
 }

@@ -4,10 +4,10 @@ namespace QuickTools;
 
 internal static class AppVersion
 {
-    /// <summary>The running build's version, e.g. "1.0.2 (995c07a)".</summary>
+    /// <summary>The running build's version, e.g. "1.1.5 (995c07a)".</summary>
     public static string Current => Format(InformationalVersion);
 
-    /// <summary>The running build's version number without the commit, e.g. "1.0.2".</summary>
+    /// <summary>The running build's version number without the commit, e.g. "1.1.5".</summary>
     public static string Number => NumberOf(InformationalVersion);
 
     /// <summary>The copyright line from the project's &lt;Copyright&gt; property, if set.</summary>

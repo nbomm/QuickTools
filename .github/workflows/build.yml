@@ -36,7 +36,7 @@ jobs:
           dotnet-version: 10.0.x
 
       # Major.Minor from <VersionPrefix> in the project file, patch = run number.
-      # Pushes to main are releases (1.0.42); anything else is marked -ci (1.0.42-ci).
+      # Pushes to main are releases (1.1.42); anything else is marked -ci (1.1.42-ci).
       - name: Determine version
         id: version
         shell: pwsh

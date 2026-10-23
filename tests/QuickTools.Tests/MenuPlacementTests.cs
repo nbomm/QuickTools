@@ -125,6 +125,44 @@ public class MenuPlacementTests
         Assert.Equal(0, MenuPlacement.Calculate(icon, new Size(1000, 300), workArea).X);
     }
 
+    [Fact]
+    public void AtPoint_PutsTopLeftCornerOnThePoint()
+    {
+        var workArea = new Rectangle(0, 0, 1920, 1040);
+
+        Assert.Equal(new Point(500, 400), MenuPlacement.CalculateAtPoint(new Point(500, 400), Menu, workArea));
+    }
+
+    [Fact]
+    public void AtPoint_NearRightAndBottomEdges_FlipsLeftAndAbove()
+    {
+        var workArea = new Rectangle(0, 0, 1920, 1040);
+
+        var location = MenuPlacement.CalculateAtPoint(new Point(1900, 1030), Menu, workArea);
+
+        Assert.Equal(new Point(1700, 730), location);
+        AssertInside(workArea, location, Menu);
+    }
+
+    [Fact]
+    public void AtPoint_SecondaryMonitorWithNegativeCoordinates()
+    {
+        var workArea = new Rectangle(-1920, 0, 1920, 1040);
+
+        var location = MenuPlacement.CalculateAtPoint(new Point(-10, 500), Menu, workArea);
+
+        Assert.Equal(new Point(-210, 500), location);
+        AssertInside(workArea, location, Menu);
+    }
+
+    [Fact]
+    public void AtPoint_MenuLargerThanWorkArea_PinsToTopLeft()
+    {
+        var workArea = new Rectangle(0, 0, 800, 600);
+
+        Assert.Equal(new Point(0, 0), MenuPlacement.CalculateAtPoint(new Point(400, 300), new Size(1000, 3000), workArea));
+    }
+
     [Theory]
     [InlineData(0, 0)]
     [InlineData(1900, 0)]
